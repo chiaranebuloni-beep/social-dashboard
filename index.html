@@ -48,6 +48,11 @@ html { height: 100%; }
 </head>
 <body>
 <div id="root"></div>
+<div id="err-banner" style="display:none;position:fixed;bottom:0;left:0;right:0;background:#fee2e2;color:#991b1b;padding:12px 20px;font-size:12px;font-family:monospace;z-index:99999;max-height:200px;overflow:auto;border-top:2px solid #ef4444"></div>
+<script>
+window.addEventListener('error',function(e){var b=document.getElementById('err-banner');if(b){b.style.display='block';b.innerHTML+='<b>Error:</b> '+(e.message||'unknown')+' <i>('+e.filename+':'+e.lineno+':'+e.colno+')</i><br>'+(e.error&&e.error.stack?'<pre>'+e.error.stack+'</pre>':'')+'<hr>';}},true);
+window.addEventListener('unhandledrejection',function(e){var b=document.getElementById('err-banner');if(b){b.style.display='block';b.innerHTML+='<b>Promise:</b> '+(e.reason?e.reason.message||String(e.reason):'?')+'<hr>';}});
+</script>
 <script type="text/babel">
 const { useState, useMemo, useCallback, useRef, useEffect } = React;
 
