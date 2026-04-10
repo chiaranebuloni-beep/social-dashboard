@@ -2272,7 +2272,7 @@ function SocialDashboard(){
 
     // ── 2. COPY — Use built-in CONTENT_ANGLES as primary (Claude-written) ──
     // Gemini AI copy is available as optional enhancement but NOT the default
-    const count=customThemes&&customThemes.length>0?customThemes.length:(genConfig.postCount||5);
+    const count=genConfig.postCount||5;
     let aiIdeas=null;
     // Only use Gemini if user explicitly enabled it in settings AND has API key
     if(geminiKey&&genConfig.useGeminiCopy&&!customThemes){
@@ -3436,12 +3436,14 @@ function GenerateView({activeClient,genConfig,setGenConfig,generatePosts,isGener
   const removeTheme=(i)=>setCustomThemes(p=>p.filter((_,idx)=>idx!==i));
 
   const handleGenerate=()=>{
-    if(customThemes.length>0){
-      setGenConfig(prev=>({...prev,customThemes}));
+    // Pass customThemes array (keeps blanks so generatePosts knows per-post themes by index)
+    const themesForGen=customThemes.length>0?customThemes:[];
+    if(themesForGen.some(t=>t.trim())){
+      setGenConfig(prev=>({...prev,customThemes:themesForGen}));
     }
     const selBK=selectedTemplate?(canvaBrandKitsDyn||CANVA_BRAND_KITS).find(b=>b.id===selectedTemplate):null;
     const tplPrompt=selBK?`Use the visual identity of the Canva brand kit "${selBK.name}". Match the brand's style, colors, mood, and design language. Create a background that feels native to this brand's existing Canva designs.`:"";
-    generatePosts(customThemes, graphicStyle, tplPrompt);
+    generatePosts(themesForGen, graphicStyle, tplPrompt);
   };
   const openClientSheet=()=>{
     // Defensive navigation: clear post detail state and force client sheet view
@@ -3471,45 +3473,40 @@ function GenerateView({activeClient,genConfig,setGenConfig,generatePosts,isGener
 
       <p style={{color:"#94a3b8",fontSize:13,margin:"0 0 20px"}}>Genera automaticamente oppure inserisci i contenuti specifici richiesti dal cliente.</p>
 
-      {/* ── Contenuti personalizzati dal cliente ── */}
+      {/* ── Quanti post (SOPRA contenuti) ── */}
       <div style={{background:"#fff",borderRadius:16,padding:28,border:"1px solid #e2e8f0",marginBottom:20}}>
-        <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:16}}>
-          <Icons.Edit size={18} color="#6366f1"/>
-          <h3 style={{margin:0,fontSize:16,fontWeight:700,color:"#1e293b"}}>Contenuti del cliente</h3>
-          <Badge color="#6366f1">Opzionale</Badge>
-        </div>
-        <p style={{fontSize:12,color:"#94a3b8",marginBottom:16}}>Inserisci i temi o argomenti specifici richiesti dal cliente. Se lasci vuoto, il sistema genera idee automaticamente dal settore "{activeClient.sector}".</p>
-        <div style={{display:"flex",gap:8,marginBottom:12}}>
-          <input value={newTheme} onChange={e=>setNewTheme(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")addTheme();}} placeholder="Es. Promo weekend, Nuovo menu primavera, Evento live sabato..." style={{...inputStyle,flex:1,marginBottom:0}}/>
-          <button onClick={addTheme} disabled={!newTheme.trim()} style={{padding:"10px 20px",borderRadius:8,border:"none",background:newTheme.trim()?"#6366f1":"#e2e8f0",color:newTheme.trim()?"#fff":"#94a3b8",fontSize:13,fontWeight:600,cursor:newTheme.trim()?"pointer":"not-allowed",whiteSpace:"nowrap"}}>+ Aggiungi</button>
-        </div>
-        {customThemes.length>0&&<div style={{display:"flex",flexWrap:"wrap",gap:8,marginBottom:8}}>
-          {customThemes.map((t,i)=><div key={i} style={{display:"flex",alignItems:"center",gap:6,background:"#eef2ff",borderRadius:8,padding:"6px 12px",fontSize:12,fontWeight:600,color:"#6366f1"}}>
-            {t}
-            <button onClick={()=>removeTheme(i)} style={{background:"none",border:"none",cursor:"pointer",color:"#6366f1",fontSize:14,lineHeight:1,padding:0}}>×</button>
-          </div>)}
-        </div>}
-        {customThemes.length>0&&<div style={{background:"#f0fdf4",borderRadius:8,padding:10,display:"flex",alignItems:"center",gap:8}}>
-          <Icons.Check size={14} color="#10b981"/>
-          <span style={{fontSize:11,color:"#166534"}}>{customThemes.length} tema/i personalizzati. Verranno usati al posto delle idee automatiche.</span>
-        </div>}
-      </div>
-
-      {/* ── Configurazione generazione ── */}
-      <div style={{background:"#fff",borderRadius:16,padding:28,border:"1px solid #e2e8f0"}}>
         <label style={labelStyle}>Quanti post vuoi generare?</label>
-        <input type="range" min={1} max={20} value={genConfig.postCount||5} onChange={e=>setGenConfig({...genConfig,postCount:+e.target.value})} style={{width:"100%"}}/>
-        <div style={{textAlign:"center",fontWeight:700,fontSize:28,color:"#6366f1",margin:"4px 0 20px"}}>{customThemes.length>0?customThemes.length:genConfig.postCount||5} post</div>
-        {customThemes.length>0&&<div style={{background:"#f0fdf4",borderRadius:10,padding:16,marginBottom:16}}>
-          <div style={{fontSize:13,color:"#166534"}}>Verranno generati <strong>{customThemes.length}</strong> post personalizzati (uno per ogni tema inserito)</div>
-        </div>}
-        {(activeClient.website||activeClient.driveFolder)&&<div style={{background:"#eef2ff",borderRadius:10,padding:12,marginBottom:16,display:"flex",alignItems:"center",gap:8}}>
+        <input type="range" min={1} max={20} value={genConfig.postCount||5} onChange={e=>{setGenConfig({...genConfig,postCount:+e.target.value});const newCount=+e.target.value;setCustomThemes(prev=>{const arr=[...prev];while(arr.length<newCount)arr.push("");while(arr.length>newCount)arr.pop();return arr;});}} style={{width:"100%"}}/>
+        <div style={{textAlign:"center",fontWeight:700,fontSize:28,color:"#6366f1",margin:"4px 0 12px"}}>{genConfig.postCount||5} post</div>
+        {(activeClient.website||activeClient.driveFolder)&&<div style={{background:"#eef2ff",borderRadius:10,padding:12,marginBottom:0,display:"flex",alignItems:"center",gap:8}}>
           <Icons.Image size={14} color="#6366f1"/>
           <span style={{fontSize:12,color:"#4338ca"}}>Le immagini verranno prese {activeClient.website&&<>dal sito <strong>{activeClient.website.replace(/^https?:\/\//,"")}</strong></>}{activeClient.website&&activeClient.driveFolder&&" e "}{activeClient.driveFolder&&<>dalla <strong>cartella Google Drive</strong></>}</span>
         </div>}
-        {activeClient.files?.filter(f=>f.type?.startsWith("image/")).length>0&&<div style={{background:"#fef3c7",borderRadius:10,padding:12,marginBottom:16,display:"flex",alignItems:"center",gap:8}}>
+        {activeClient.files?.filter(f=>f.type?.startsWith("image/")).length>0&&<div style={{background:"#fef3c7",borderRadius:10,padding:12,marginTop:8,display:"flex",alignItems:"center",gap:8}}>
           <Icons.Upload size={14} color="#f59e0b"/>
           <span style={{fontSize:12,color:"#92400e"}}>{activeClient.files.filter(f=>f.type?.startsWith("image/")).length} foto caricate dal cliente verranno usate nei post</span>
+        </div>}
+      </div>
+
+      {/* ── Box per ogni post ── */}
+      <div style={{background:"#fff",borderRadius:16,padding:28,border:"1px solid #e2e8f0"}}>
+        <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:16}}>
+          <Icons.Edit size={18} color="#6366f1"/>
+          <h3 style={{margin:0,fontSize:16,fontWeight:700,color:"#1e293b"}}>Contenuti per post</h3>
+          <Badge color="#6366f1">Opzionale</Badge>
+        </div>
+        <p style={{fontSize:12,color:"#94a3b8",marginBottom:16}}>Descrivi il tema di ogni post. Se lasci vuoto, il sistema genera idee automaticamente dal settore "{activeClient.sector}".</p>
+        <div style={{display:"flex",flexDirection:"column",gap:10}}>
+          {Array.from({length:genConfig.postCount||5}).map((_,i)=>(
+            <div key={i} style={{display:"flex",gap:10,alignItems:"center"}}>
+              <div style={{width:32,height:32,borderRadius:8,background:"linear-gradient(135deg,#6366f1,#a855f7)",color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:700,flexShrink:0}}>{i+1}</div>
+              <input value={customThemes[i]||""} onChange={e=>{const arr=[...customThemes];while(arr.length<=i)arr.push("");arr[i]=e.target.value;setCustomThemes(arr);}} placeholder={`Es. Promo weekend, Nuovo menu, Evento live...`} style={{...inputStyle,flex:1,marginBottom:0}}/>
+            </div>
+          ))}
+        </div>
+        {customThemes.filter(t=>t.trim()).length>0&&<div style={{background:"#f0fdf4",borderRadius:8,padding:10,marginTop:12,display:"flex",alignItems:"center",gap:8}}>
+          <Icons.Check size={14} color="#10b981"/>
+          <span style={{fontSize:11,color:"#166534"}}>{customThemes.filter(t=>t.trim()).length} post con tema personalizzato. I restanti verranno generati automaticamente.</span>
         </div>}
       </div>
 
@@ -3613,7 +3610,7 @@ function GenerateView({activeClient,genConfig,setGenConfig,generatePosts,isGener
       {/* ── Bottone Genera ── */}
       <div style={{marginTop:20}}>
         <button onClick={handleGenerate} disabled={isGenerating||convertingSelected} style={{width:"100%",padding:"16px 0",borderRadius:14,border:"none",background:isGenerating||convertingSelected?"#94a3b8":"linear-gradient(135deg,#6366f1,#a855f7)",color:"#fff",fontSize:16,fontWeight:700,cursor:isGenerating||convertingSelected?"wait":"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:8,boxShadow:"0 4px 12px rgba(99,102,241,.3)"}}>
-          {isGenerating?<><div className="spinner"/> Recupero immagini e genero post...</>:convertingSelected?<><div className="spinner"/> Preparazione immagini selezionate...</>:<><Icons.Sparkles size={20}/> Genera {customThemes.length>0?customThemes.length+" post personalizzati":(genConfig.postCount||5)+" post"}{selectedGalleryIdxs.size>0?" con "+selectedGalleryIdxs.size+" foto selezionate":""}</>}
+          {isGenerating?<><div className="spinner"/> Recupero immagini e genero post...</>:convertingSelected?<><div className="spinner"/> Preparazione immagini selezionate...</>:<><Icons.Sparkles size={20}/> Genera {genConfig.postCount||5} post{selectedGalleryIdxs.size>0?" con "+selectedGalleryIdxs.size+" foto selezionate":""}</>}
         </button>
         {scrapingResult&&<div style={{marginTop:12,padding:12,borderRadius:10,background:scrapingResult.includes("Non sono")?"#fef3c7":"#f0fdf4",display:"flex",alignItems:"center",gap:8}}>
           {scrapingResult.includes("Non sono")?<Icons.X size={14} color="#f59e0b"/>:<Icons.Check size={14} color="#10b981"/>}
