@@ -48,14 +48,6 @@ html { height: 100%; }
 </head>
 <body>
 <div id="root"></div>
-<div id="error-display" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:#fff;z-index:99999;padding:40px;font-family:monospace;overflow:auto"></div>
-<script>
-window.onerror=function(msg,src,line,col,err){
-  var el=document.getElementById('error-display');
-  if(el){el.style.display='block';el.innerHTML='<h2 style="color:red">JS Error</h2><pre>'+msg+'\n\nLine: '+line+' Col: '+col+'\n\n'+(err&&err.stack?err.stack:'')+'</pre>';}
-  return false;
-};
-</script>
 <script type="text/babel">
 const { useState, useMemo, useCallback, useRef, useEffect } = React;
 
