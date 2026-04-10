@@ -184,8 +184,14 @@ function CalendarWidget({posts=[]}){
 // ─── Data & Helpers ────────────────────────────────────────────
 const DAYS_IT = ["Lun","Mar","Mer","Gio","Ven","Sab","Dom"];
 const MONTHS_IT = ["Gennaio","Febbraio","Marzo","Aprile","Maggio","Giugno","Luglio","Agosto","Settembre","Ottobre","Novembre","Dicembre"];
-const PLATFORMS = ["Instagram","Facebook"];
-const TONES = ["Professionale","Amichevole","Ironico","Ispirazionale","Informativo","Lusso","Giovane"];
+const PLATFORMS = ["Instagram","Facebook","LinkedIn","Twitter","Meta/SEO"];
+const CS_PLATFORMS = {instagram:"Instagram",linkedin:"LinkedIn",twitter:"Twitter",facebook:"Facebook",meta_seo:"Meta/SEO"};
+const CS_FORMATS = {carousel:"Carosello",single:"Post singolo"};
+const CS_TONES_MAP = {professional:"Professionale",casual:"Amichevole",provocative:"Provocativo"};
+const CS_LANGUAGES = {auto:"Auto-detect",it:"Italiano",en:"English",es:"Español",de:"Deutsch",fr:"Français",pt:"Português"};
+const CS_HASHTAG_DENSITY = {few:"Pochi (3)",medium:"Medi (5)",many:"Molti (8)"};
+const CS_COPY_LENGTH = {short:"Corto",medium:"Medio",long:"Lungo"};
+const TONES = ["Professionale","Amichevole","Ironico","Ispirazionale","Informativo","Lusso","Giovane","Provocativo"];
 const SECTORS = ["Ristorazione","Moda","Tech","Beauty","Fitness","Immobiliare","E-commerce","Consulenza","Artigianato","Turismo","Altro"];
 const ACCOUNT_MANAGERS = ["Feffa","Elisa","Camilla","Veronica","Molli","Sara","Carlotta","Lorenzo","Erika","Lollo","Non assegnato"];
 const GRAPHIC_DESIGNERS = ["Chiara","Petra","Giulia","Alessia","Arianna","Arianna 2","Non assegnato"];
@@ -1041,6 +1047,181 @@ async function imageUrlToBase64(url) {
     console.warn("imageUrlToBase64 failed:", e.message);
     return null;
   }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// ─── ContentSplit Engine — copy + image prompt builders ───────────
+// ═══════════════════════════════════════════════════════════════════
+
+function csBrandSection(client){
+  const parts=[`Brand name: ${client.name}`,`Description: ${client.description||'N/A'}`,`Brand colors: ${(client.palette?.colors||[]).join(', ')}`];
+  if(client.fontHeading) parts.push(`Brand fonts: ${client.fontHeading}, ${client.fontBody||client.fontHeading}`);
+  if(client.target) parts.push(`Target audience: ${client.target}`);
+  return parts.join('\n');
+}
+
+const CS_HASHTAG_COUNTS={few:{primary:1,secondary:1,niche:1},medium:{primary:2,secondary:2,niche:1},many:{primary:3,secondary:3,niche:2}};
+const CS_LENGTH_LABELS={short:'Keep copy concise and punchy — 30% shorter than standard.',medium:'',long:'Write more detailed, in-depth copy — 30% longer than standard.'};
+
+function csHashtagInstruction(density='medium'){
+  const c=CS_HASHTAG_COUNTS[density]||CS_HASHTAG_COUNTS.medium;
+  return `primary: ${c.primary} popular hashtags, secondary: ${c.secondary} medium hashtags, niche: ${c.niche} niche hashtags`;
+}
+
+function csPlatformSchema(platform,format,slides,hashtagDensity='medium'){
+  const hd=CS_HASHTAG_COUNTS[hashtagDensity]||CS_HASHTAG_COUNTS.medium;
+  const hashtagSchema=`"primary":["string (${hd.primary} popular hashtags)"],"secondary":["string (${hd.secondary} medium hashtags)"],"niche":["string (${hd.niche} niche hashtags)"]`;
+  switch(platform){
+    case 'twitter':return `{"copy":{"thread":["string (max 280 chars each, 5-6 tweets)"],"single_tweet":"string (max 280 chars)"},"hashtags":{${hashtagSchema}}}`;
+    case 'linkedin':return `{"copy":{"post":"string (800-1200 chars, bold opening, line breaks, CTA, max 3 emoji)"},"hashtags":{${hashtagSchema}}}`;
+    case 'instagram':
+      if(format==='single') return `{"copy":{"caption":"string (300-500 chars, strong hook, CTA, NO hashtags)"},"hashtags":{${hashtagSchema}}}`;
+      {const n=slides||5;return `{"copy":{"caption":"string (300-500 chars, strong hook, CTA, NO hashtags)","carousel_slides":["string (${n} slides)"]},"hashtags":{${hashtagSchema}}}`;}
+    case 'facebook':return `{"copy":{"post":"string (500-1500 chars, conversational, engaging)"},"hashtags":{${hashtagSchema}}}`;
+    case 'meta_seo':return `{"copy":{"meta_description":"string (max 155 chars)","og_title":"string (max 60 chars)","key_takeaways":["string (3 takeaways)"]},"hashtags":{${hashtagSchema}}}`;
+  }
+}
+
+function csPlatformInstructions(platform,format,slides,slideDescriptions){
+  switch(platform){
+    case 'twitter':return `PLATFORM: Twitter / X\n- Write a thread of 5-6 tweets, each STRICTLY max 280 characters\n- First tweet must be a powerful hook\n- Also write a standalone single_tweet (max 280 chars)`;
+    case 'linkedin':return `PLATFORM: LinkedIn\n- Write a single post of 800-1200 characters\n- Bold statement opening (hook before "...see more")\n- Line breaks for readability\n- End with question or CTA\n- Max 3 emoji`;
+    case 'instagram':
+      if(format==='single') return `PLATFORM: Instagram (Single Post)\n- Caption 300-500 characters\n- Strong hook first line\n- Value + CTA\n- NO hashtags in caption`;
+      {const n=slides||5;
+       let slideStructure='';
+       if(slideDescriptions&&slideDescriptions.length>=n){
+         const lines=slideDescriptions.slice(0,n).map((desc,i)=>{
+           const label=i===0?'Hook/Title':i===n-1?'CTA/Closing':`Point ${i}`;
+           return desc.trim()?`  Slide ${i+1} (${label}): "${desc.trim()}"`:`  Slide ${i+1} (${label}): AI decides content`;
+         });
+         slideStructure=`Follow this slide structure EXACTLY:\n${lines.join('\n')}`;
+       } else {
+         slideStructure=`Slide 1 is the hook/title, Slides 2-${n-1} are key points, Slide ${n} is the CTA`;
+       }
+       return `PLATFORM: Instagram (Carousel)\n- Caption 300-500 chars, strong hook first line\n- Write exactly ${n} carousel_slides\n- ${slideStructure}\n- Each slide text under 100 chars\n- NO hashtags in caption`;}
+    case 'facebook':return `PLATFORM: Facebook\n- Post 500-1500 chars, conversational tone\n- Hook that stops the scroll\n- Short paragraphs with line breaks\n- Clear CTA at end\n- 3-5 emoji welcome`;
+    case 'meta_seo':return `PLATFORM: Meta / SEO\n- meta_description: max 155 chars with main keyword\n- og_title: max 60 chars, compelling\n- key_takeaways: exactly 3 concise strings`;
+  }
+}
+
+function buildCSCopyPrompt(client,platform,topic,format,slides,tone,language,slideDescriptions,hashtagDensity,copyLength){
+  const toneKey=tone||'professional';
+  const langKey=language||'auto';
+  const languageInstruction=langKey==='auto'
+    ?'Detect the language from the brand context. Write ALL output in that language. If brand is Italian, write Italian. Do NOT default to English.'
+    :`Write ALL output in ${langKey==='it'?'Italian':langKey==='en'?'English':langKey==='es'?'Spanish':langKey==='de'?'German':langKey==='fr'?'French':'Portuguese'}. Mandatory.`;
+  const topicInstruction=topic?`TOPIC TO WRITE ABOUT:\n${topic}`:'No specific topic provided. Pick a compelling content idea based on the brand.';
+  const customSections=[];
+  if(client.canvaStyle?.trim()) customSections.push(`CUSTOM BRAND INSTRUCTIONS:\n${client.canvaStyle.trim()}`);
+  const lengthInstruction=copyLength&&copyLength!=='medium'?`\nCOPY LENGTH: ${CS_LENGTH_LABELS[copyLength]}`:'';
+
+  const system=`You are ContentSplit, a brand-first content generation engine. You create platform-native social media copy.\n\nCORE RULES:\n1. ALL content must sound like it comes from the brand.\n2. Each platform output must feel NATIVE.\n3. Tone: "${toneKey}" ${toneKey==='professional'?'— authoritative, data-driven':toneKey==='casual'?'— conversational, relatable':'— bold claims, contrarian takes'}\n4. Hashtags: mix of popular (>100K) and niche (<10K).\n5. ALWAYS respond in valid JSON. No markdown, no backticks, ONLY raw JSON.\n6. CRITICAL — LANGUAGE: ${languageInstruction}\n\nBRAND IDENTITY:\n${csBrandSection(client)}\n\n${csPlatformInstructions(platform,format,slides,slideDescriptions)}\n\n${customSections.length>0?customSections.join('\n\n')+'\n\n':''}LANGUAGE: ${languageInstruction}\nTONE: ${toneKey}${lengthInstruction}\n\nHASHTAGS: ${csHashtagInstruction(hashtagDensity)}\n\nOUTPUT JSON SCHEMA (match EXACTLY):\n${csPlatformSchema(platform,format,slides,hashtagDensity)}`;
+
+  const langReminder=langKey==='auto'?'Write in the same language as the brand context.':languageInstruction;
+  const user=`${topicInstruction}\n\nGenerate ${platform} content for the brand "${client.name}" with a ${toneKey} tone.\nIMPORTANT: ${langReminder}\nRespond with ONLY valid JSON. No explanation, no markdown.`;
+  return {system,user};
+}
+
+// ─── ContentSplit Image Prompts per platform ───
+function csBrandContext(client){
+  const parts=[`Brand name: ${client.name}`];
+  if(client.description) parts.push(`Brand description: ${client.description.substring(0,200)}`);
+  const colors=client.palette?.colors||[];
+  if(colors.length>0) parts.push(`Brand colors: ${colors.join(', ')}`);
+  if(client.fontHeading) parts.push(`Use fonts similar to: ${client.fontHeading}, ${client.fontBody||client.fontHeading}`);
+  if(client.target) parts.push(`Target audience: ${client.target}`);
+  return parts.join('\n');
+}
+
+function csInstagramSlidePrompt(copyText,client,slideIndex,totalSlides,hasPreviousSlides,overlayText){
+  const slideLabels=['Hook / Title slide','Key Point 1','Key Point 2','Key Point 3','CTA / Closing slide'];
+  const slideLabel=slideLabels[slideIndex]||`Slide ${slideIndex+1}`;
+  let slideContent,captionContext='';
+  if(overlayText){slideContent=overlayText;captionContext=`\nCAPTION CONTEXT (for theme/mood only — do NOT put this in image):\n${copyText.substring(0,300)}`;}
+  else{const lines=copyText.split('\n').filter(l=>l.trim());slideContent=lines[slideIndex]||copyText.substring(0,200);}
+  const prevCtx=hasPreviousSlides?`\nCRITICAL — VISUAL CONSISTENCY:\nPrevious slides are provided as reference. MATCH their exact visual style:\n- Same background, typography, decorative elements, layout, colors\n- Only change TEXT CONTENT — keep everything else identical\n- Do NOT repeat text from previous slides.`:'';
+  return `Generate a professional Instagram carousel slide image (1080x1080 pixels, square).\n\nThis is slide ${slideIndex+1} of ${totalSlides}: "${slideLabel}"\n\nSLIDE TEXT (ONLY text to render):\n${slideContent}${captionContext}\n\nBRAND IDENTITY:\n${csBrandContext(client)}${prevCtx}\n\nDESIGN REQUIREMENTS:\n- Use brand colors as primary palette\n- Clean, modern typography — large and readable\n- ${slideIndex===0?'HOOK slide — bold, eye-catching. Establish the visual template.':slideIndex===totalSlides-1?'CTA slide — clear call to action':'Key point slide'}\n- Professional social media graphic, not a photograph\n\nTEXT RULES:\n- ONLY render the SLIDE TEXT above\n- Max 15-20 words. Shorten to punchy headline if longer\n- Generous whitespace\n- Do NOT include watermarks\n- MUST spell all words correctly\n\nGenerate the image now.`;
+}
+
+function csInstagramSinglePrompt(copyText,client,overlayText){
+  const textToUse=overlayText||'';
+  const captionCtx=`\nPOST CAPTION (theme/mood only — NOT in image):\n${copyText.substring(0,400)}`;
+  return `Generate a professional Instagram single post image (1080x1080 pixels, square).\n${textToUse?`\nIMAGE TEXT (optional):\n${textToUse}`:''}\n${captionCtx}\n\nBRAND IDENTITY:\n${csBrandContext(client)}\n\nDESIGN:\n- Brand colors as primary palette\n- Visually striking, scroll-stopping\n- VISUAL-FIRST — communicate through design, not text\n\nTEXT RULES:\n- Not text-heavy. If text, max 5-8 words\n- Caption shown BELOW by Instagram — do NOT duplicate\n- Brand name subtle (small, corner)\n- No watermarks. Spell correctly.\n\nGenerate the image now.`;
+}
+
+function csTwitterImagePrompt(copyText,client,overlayText){
+  const textSection=overlayText?`\nIMAGE HEADLINE (max 8 words):\n${overlayText}\n\nTWEET CONTEXT (theme/mood only):\n${copyText.substring(0,300)}`:`\nTWEET CONTEXT (extract SHORT headline max 8 words):\n${copyText.substring(0,500)}`;
+  return `Generate a professional Twitter/X header image (1200x675 pixels, 16:9 landscape).\n${textSection}\n\nBRAND IDENTITY:\n${csBrandContext(client)}\n\nDESIGN:\n- Brand colors\n- Eye-catching, complements tweet\n- Primarily VISUAL\n- Text OPTIONAL — max 5-8 words headline\n- No watermarks. Spell correctly.\n\nGenerate the image now.`;
+}
+
+function csLinkedinImagePrompt(copyText,client,overlayText){
+  const textSection=overlayText?`\nIMAGE HEADLINE (max 10 words):\n${overlayText}\n\nPOST CONTEXT (theme/mood only):\n${copyText.substring(0,400)}`:`\nPOST CONTEXT (extract SHORT headline max 10 words):\n${copyText.substring(0,600)}`;
+  return `Generate a professional LinkedIn post visual (1200x627 pixels, landscape).\n${textSection}\n\nBRAND IDENTITY:\n${csBrandContext(client)}\n\nDESIGN:\n- Brand colors, professional business design\n- Can be infographic, data viz, or clean graphic\n- Text MINIMAL — max 10-12 words\n- No watermarks. Spell correctly.\n\nGenerate the image now.`;
+}
+
+function csFacebookImagePrompt(copyText,client,overlayText){
+  const textSection=overlayText?`\nIMAGE HEADLINE (max 10 words):\n${overlayText}\n\nPOST CONTEXT (theme/mood only):\n${copyText.substring(0,400)}`:`\nPOST CONTEXT (extract SHORT headline max 10 words):\n${copyText.substring(0,600)}`;
+  return `Generate a professional Facebook post image (1200x630 pixels, landscape).\n${textSection}\n\nBRAND IDENTITY:\n${csBrandContext(client)}\n\nDESIGN:\n- Brand colors\n- Eye-catching, shareable, warm and friendly\n- Text MINIMAL — max 8-10 words headline\n- No watermarks. Spell correctly.\n\nGenerate the image now.`;
+}
+
+function csGetImagePrompt(platform,copyText,client,imageIndex,totalImages,hasPreviousSlides,overlayText){
+  switch(platform){
+    case 'instagram':
+      if(totalImages===1) return csInstagramSinglePrompt(copyText,client,overlayText);
+      return csInstagramSlidePrompt(copyText,client,imageIndex,totalImages,hasPreviousSlides,overlayText);
+    case 'twitter':return csTwitterImagePrompt(copyText,client,overlayText);
+    case 'linkedin':return csLinkedinImagePrompt(copyText,client,overlayText);
+    case 'facebook':return csFacebookImagePrompt(copyText,client,overlayText);
+    case 'meta_seo':return `Generate a professional Open Graph image (1200x630 pixels, landscape).\n${overlayText?`\nOG TITLE:\n${overlayText}\n\nCONTEXT:\n${copyText.substring(0,300)}`:`\nCONTEXT (extract headline max 10 words):\n${copyText.substring(0,400)}`}\n\nBRAND IDENTITY:\n${csBrandContext(client)}\n\nDESIGN:\n- Brand colors, professional, optimized for link previews\n- Brand logo/name visible\n- Headline max 8-10 words\n- No watermarks. Spell correctly.\n\nGenerate the image now.`;
+    default:return csInstagramSinglePrompt(copyText,client,overlayText);
+  }
+}
+
+// ─── ContentSplit Copy Generator via Gemini ───
+async function generateCSCopy(apiKey,client,platform,topic,format,slides,tone,language,slideDescriptions,hashtagDensity,copyLength){
+  const url=`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
+  const {system,user}=buildCSCopyPrompt(client,platform,topic,format,slides,tone,language,slideDescriptions,hashtagDensity,copyLength);
+  try{
+    const res=await fetch(url,{
+      method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({
+        systemInstruction:{parts:[{text:system}]},
+        contents:[{role:"user",parts:[{text:user}]}],
+        generationConfig:{temperature:0.7,maxOutputTokens:2000,responseMimeType:"application/json"}
+      })
+    });
+    if(!res.ok){console.warn("[CS Copy] Gemini error",res.status);return null;}
+    const data=await res.json();
+    const text=data?.candidates?.[0]?.content?.parts?.[0]?.text||"";
+    const cleaned=text.replace(/```json\s*/gi,"").replace(/```\s*/gi,"").trim();
+    const parsed=JSON.parse(cleaned);
+    console.log("[CS Copy] Generated",platform,"copy for",client.name);
+    return parsed;
+  }catch(e){console.warn("[CS Copy] Error:",e);return null;}
+}
+
+// ─── ContentSplit Image Generator (with carousel consistency) ───
+async function generateCSImage(apiKey,client,platform,copyText,imageIndex,totalImages,previousSlideImages,overlayText,graphicStyle){
+  const prompt=csGetImagePrompt(platform,copyText,client,imageIndex,totalImages,previousSlideImages&&previousSlideImages.length>0,overlayText);
+
+  // Build system instruction
+  const colors=client.palette?.colors||[];
+  const sysInstruction=`You are a world-class social media graphic designer. Create scroll-stopping, professional visuals.\n\nCORE RULES:\n1. Generate the visual — can include text overlay if specified in the prompt.\n2. Fill the ENTIRE canvas edge-to-edge.\n3. Match brand identity precisely.\n\nBRAND IDENTITY:\n- Brand: "${client.name}" — ${client.sector||"business"}\n- Colors: ${colors.join(", ")}\n${client.canvaStyle?`- Visual style: ${client.canvaStyle}`:''}\n${client.target?`- Target: ${client.target}`:''}${graphicStyle?`\n\nSTYLE OVERRIDE: ${graphicStyle}`:''}`;
+
+  // Collect reference images (previous carousel slides for consistency)
+  const refImages=[];
+  if(previousSlideImages&&previousSlideImages.length>0){
+    for(const prevImg of previousSlideImages.slice(-3)){
+      if(prevImg&&prevImg.startsWith("data:")){
+        const parts=prevImg.split(",");
+        const mimeMatch=prevImg.match(/data:([^;]+);/);
+        if(parts[1]&&mimeMatch) refImages.push({base64:parts[1],mimeType:mimeMatch[1]});
+      }
+    }
+  }
+
+  return generateImageWithGemini(apiKey,prompt,refImages.length>0?refImages:null,sysInstruction);
 }
 
 // ─── Gemini Text API — genera copy personalizzato per ogni cliente ───
@@ -2261,113 +2442,149 @@ function SocialDashboard(){
 
     // ── 1. FETCH BRAND KIT FONTS on-demand if not cached ──
     if(activeClient.canvaBrandKit&&canvaToken&&!_bkFontsCache[activeClient.canvaBrandKit]){
-      console.log("[SocialDash] Fetching brand kit fonts for",activeClient.name,"...");
       const fonts=await _fetchBkFonts(activeClient.canvaBrandKit,canvaToken);
-      if(fonts){
-        _bkFontsCache[activeClient.canvaBrandKit]=fonts;
-        _idbSave("bkFontsCache",_bkFontsCache);
-        console.log("[SocialDash] Fetched fonts:",fonts.h,"/",fonts.b);
-      }
+      if(fonts){_bkFontsCache[activeClient.canvaBrandKit]=fonts;_idbSave("bkFontsCache",_bkFontsCache);}
     }
 
-    // ── 2. COPY — Use built-in CONTENT_ANGLES as primary (Claude-written) ──
-    // Gemini AI copy is available as optional enhancement but NOT the default
     const count=genConfig.postCount||5;
-    let aiIdeas=null;
-    // Only use Gemini if user explicitly enabled it in settings AND has API key
-    if(geminiKey&&genConfig.useGeminiCopy&&!customThemes){
-      console.log("[SocialDash] Generating AI copy for",activeClient.name,"(",count,"posts)...");
-      aiIdeas=await generateAICopyIdeas(geminiKey,activeClient,count);
-    }
+    const csPlatform=genConfig.csPlatform||'instagram';
+    const csFormat=genConfig.csFormat||'carousel';
+    const csTone=genConfig.csTone||'professional';
+    const csLanguage=genConfig.csLanguage||'auto';
+    const csHashDensity=genConfig.csHashtagDensity||'medium';
+    const csCopyLen=genConfig.csCopyLength||'medium';
+    const csSlides=genConfig.csSlides||5;
+    const useContentSplit=!!geminiKey; // Use ContentSplit engine when Gemini key is available
 
-    // ── 3. Scrape images from client website if available ──
-    let scrapedImages=[];
+    // ── 2. Scrape images from client sources ──
+    let scrapedImages=[],driveImages=[],stockPhotos=[];
     const websiteUrl=activeClient.website;
-    if(websiteUrl){
-      if(scrapedImagesCache[activeClient.id+"_site"]){
-        scrapedImages=scrapedImagesCache[activeClient.id+"_site"];
-      } else {
-        try{
-          scrapedImages=await scrapeWebsiteImages(websiteUrl);
-          scrapedImagesCache[activeClient.id+"_site"]=scrapedImages;
-        }catch(e){console.warn("Website scraping error:",e);}
-      }
-    }
-
-    // Scrape images from Google Drive folder if available
-    let driveImages=[];
     const driveUrl=activeClient.driveFolder;
-    if(driveUrl){
-      if(scrapedImagesCache[activeClient.id+"_drive"]){
-        driveImages=scrapedImagesCache[activeClient.id+"_drive"];
-      } else {
-        try{
-          driveImages=await scrapeDriveImages(driveUrl);
-          scrapedImagesCache[activeClient.id+"_drive"]=driveImages;
-        }catch(e){console.warn("Drive scraping error:",e);}
-      }
+    if(websiteUrl){
+      if(scrapedImagesCache[activeClient.id+"_site"]) scrapedImages=scrapedImagesCache[activeClient.id+"_site"];
+      else try{scrapedImages=await scrapeWebsiteImages(websiteUrl);scrapedImagesCache[activeClient.id+"_site"]=scrapedImages;}catch(e){}
     }
-
-    // Also collect uploaded client images
+    if(driveUrl){
+      if(scrapedImagesCache[activeClient.id+"_drive"]) driveImages=scrapedImagesCache[activeClient.id+"_drive"];
+      else try{driveImages=await scrapeDriveImages(driveUrl);scrapedImagesCache[activeClient.id+"_drive"]=driveImages;}catch(e){}
+    }
     const clientImages=(activeClient.files||[]).filter(f=>f.type?.startsWith("image/")).map(f=>f.dataUrl).filter(Boolean);
     let allImages=[...clientImages,...driveImages,...scrapedImages];
-
-    // ── 3b. STOCK PHOTOS FALLBACK — if client has no images, search Unsplash ──
-    let stockPhotos=[];
     if(allImages.length===0){
-      console.log("[SocialDash] No client images found — searching stock photos for sector:",activeClient.sector);
       setScrapingResult("Cerco foto stock per "+activeClient.name+"...");
       const queries=getStockPhotoQueries(activeClient);
-      // Search with first 2 queries to get variety
-      for(const q of queries.slice(0,2)){
-        try{
-          const photos=await searchStockPhotos(q,8);
-          stockPhotos.push(...photos);
-        }catch(e){console.warn("[StockPhotos] Error:",e);}
-      }
-      if(stockPhotos.length>0){
-        // Remove duplicates
-        stockPhotos=[...new Set(stockPhotos)];
-        scrapedImagesCache[activeClient.id+"_stock"]=stockPhotos;
-        allImages=[...stockPhotos];
-        console.log("[SocialDash] Found",stockPhotos.length,"stock photos for",activeClient.name);
-      }
+      for(const q of queries.slice(0,2)){try{const photos=await searchStockPhotos(q,8);stockPhotos.push(...photos);}catch(e){}}
+      if(stockPhotos.length>0){stockPhotos=[...new Set(stockPhotos)];scrapedImagesCache[activeClient.id+"_stock"]=stockPhotos;allImages=[...stockPhotos];}
     }
 
-    console.log("[SocialDash] Website images:",scrapedImages.length,"Drive images:",driveImages.length,"Uploaded:",clientImages.length,"Stock photos:",stockPhotos.length,"Total:",allImages.length);
-
-    // ── 4. Generate posts (with AI copy if available) ──
+    // ── 3. GENERATE POSTS with ContentSplit Engine ──
     const np=[];const sd=new Date();
     usedIdeasMap[activeClient.id]=[];
-    for(let i=0;i<count;i++){
-      const dt=new Date(sd);dt.setDate(dt.getDate()+i);const ds=dt.toISOString().split("T")[0];
 
-      let customTheme=customThemes&&customThemes[i]?customThemes[i]:null;
-      // If AI generated ideas, inject them as custom themes
-      if(!customTheme&&aiIdeas&&aiIdeas[i]){
-        customTheme=null; // Let generatePost use aiIdeas directly
-      }
+    if(useContentSplit){
+      // Generate copy for each post using ContentSplit prompts
+      setScrapingResult("Generazione copy con ContentSplit AI...");
+      for(let i=0;i<count;i++){
+        const dt=new Date(sd);dt.setDate(dt.getDate()+i);const ds=dt.toISOString().split("T")[0];
+        const topic=customThemes&&customThemes[i]?customThemes[i].trim():'';
+        const slideDescs=(csPlatform==='instagram'&&csFormat==='carousel')?customThemes:undefined;
 
-      const post=generatePost(activeClient,ds,i,customTheme,graphicStyle,templatePrompt,aiIdeas?aiIdeas[i]:null);
-      // Assign a scraped/uploaded image to this post
-      if(allImages.length>0){
-        post.scrapedImage=allImages[i%allImages.length];
+        let copyResult=null;
+        try{
+          copyResult=await generateCSCopy(geminiKey,activeClient,csPlatform,topic||undefined,
+            csPlatform==='instagram'?csFormat:undefined,
+            csPlatform==='instagram'&&csFormat==='carousel'?csSlides:undefined,
+            csTone,csLanguage,slideDescs,csHashDensity,csCopyLen);
+        }catch(e){console.warn("[CS] Copy generation error for post",i+1,":",e);}
+
+        // Extract copy, hashtags from result
+        let body='',slogan='',cta='',hashtags=[],carouselSlides=[];
+        if(copyResult){
+          const c=copyResult.copy||{};
+          const h=copyResult.hashtags||{};
+          hashtags=[...(h.primary||[]),...(h.secondary||[]),...(h.niche||[])].map(t=>t.startsWith('#')?t:'#'+t);
+          const brandTag='#'+activeClient.name.replace(/\s+/g,'').toLowerCase();
+          hashtags=[brandTag,...hashtags];
+
+          switch(csPlatform){
+            case 'twitter':
+              body=(c.thread||[]).join('\n\n---\n\n');
+              slogan=c.single_tweet||((c.thread||[])[0]||'').substring(0,50);
+              cta=c.single_tweet||'';
+              break;
+            case 'linkedin':
+              body=c.post||'';
+              slogan=(c.post||'').split('\n')[0]?.substring(0,60)||'';
+              cta=(c.post||'').split('\n').pop()||'';
+              break;
+            case 'instagram':
+              body=c.caption||'';
+              carouselSlides=c.carousel_slides||[];
+              slogan=carouselSlides[0]||body.split('\n')[0]?.substring(0,60)||'';
+              cta=carouselSlides[carouselSlides.length-1]||'';
+              break;
+            case 'facebook':
+              body=c.post||'';
+              slogan=(c.post||'').split('\n')[0]?.substring(0,60)||'';
+              cta=(c.post||'').split('\n').pop()||'';
+              break;
+            case 'meta_seo':
+              body=`Meta Description: ${c.meta_description||''}\nOG Title: ${c.og_title||''}\n\nKey Takeaways:\n${(c.key_takeaways||[]).map((t,i)=>`${i+1}. ${t}`).join('\n')}`;
+              slogan=c.og_title||'';
+              cta=c.meta_description||'';
+              break;
+          }
+        } else {
+          // Fallback to old generatePost if ContentSplit fails
+          const fallback=generatePost(activeClient,ds,i,topic||null,graphicStyle,templatePrompt,null);
+          np.push({...fallback,csPlatform,csFormat});
+          continue;
+        }
+
+        const bkFonts=getBrandKitFonts(activeClient);
+        const post={
+          id:genId(),clientId:activeClient.id,date:ds,
+          type:csPlatform==='instagram'&&csFormat==='carousel'?'Carosello':'Post singolo',
+          body:body+'\n\n'+hashtags.join(' '),
+          theme:topic||slogan.substring(0,40),
+          slogan,cta,hashtags,
+          carouselSlides,
+          csPlatform,csFormat,csTone,csLanguage,
+          imagePrompt:'',imageSystemInstruction:'',
+          imageSuggestion:`${csPlatform} content for ${activeClient.name}`,
+          graphicStyle:graphicStyle||'',
+          fontHeading:bkFonts.heading,fontBody:bkFonts.body,
+          generatedImage:null,status:'bozza',
+          copyRaw:copyResult
+        };
+
+        if(allImages.length>0) post.scrapedImage=allImages[i%allImages.length];
+        np.push(post);
       }
-      np.push(post);
+    } else {
+      // Fallback: old generation without ContentSplit (no API key)
+      for(let i=0;i<count;i++){
+        const dt=new Date(sd);dt.setDate(dt.getDate()+i);const ds=dt.toISOString().split("T")[0];
+        const customTheme=customThemes&&customThemes[i]?customThemes[i]:null;
+        const post=generatePost(activeClient,ds,i,customTheme,graphicStyle,templatePrompt,null);
+        if(allImages.length>0) post.scrapedImage=allImages[i%allImages.length];
+        np.push(post);
+      }
     }
+
     setPosts(p=>[...p.filter(pp=>pp.clientId!==activeClient.id),...np]);
     setIsGenerating(false);
     const parts=[];
     if(scrapedImages.length>0) parts.push(scrapedImages.length+" dal sito");
     if(driveImages.length>0) parts.push(driveImages.length+" da Drive");
     if(clientImages.length>0) parts.push(clientImages.length+" caricate");
-    if(aiIdeas) parts.push("copy AI personalizzato");
+    if(useContentSplit) parts.push("copy ContentSplit AI");
     if(parts.length>0){
-      setScrapingResult((aiIdeas?"✨ Copy generato con AI per "+activeClient.name+". ":"")+(scrapedImages.length+driveImages.length+clientImages.length>0?"Immagini: "+[scrapedImages.length>0?scrapedImages.length+" dal sito":"",driveImages.length>0?driveImages.length+" da Drive":"",clientImages.length>0?clientImages.length+" caricate":""].filter(Boolean).join(", "):""));
+      setScrapingResult("✨ "+count+" post generati con ContentSplit per "+activeClient.name+". "+(allImages.length>0?"Immagini: "+parts.filter(p=>!p.includes("ContentSplit")).join(", "):""));
     } else if(websiteUrl||driveUrl){
-      setScrapingResult("Non sono riuscito a recuperare immagini. Assicurati che il sito sia online e la cartella Drive sia condivisa pubblicamente.");
-    }
-    setTimeout(()=>setScrapingResult(""),6000);
+      setScrapingResult("Post generati. Non sono riuscito a recuperare immagini dal sito/Drive.");
+    } else {setScrapingResult("✨ "+count+" post generati con ContentSplit per "+activeClient.name+".");}
+    setTimeout(()=>setScrapingResult(""),8000);
   };
   const updatePost=(pid,upd)=>{setPosts(p=>p.map(pp=>pp.id===pid?{...pp,...upd}:pp));};
   const deletePost=(pid)=>{setPosts(p=>p.filter(pp=>pp.id!==pid));if(selectedPost?.id===pid)setSelectedPost(null);};
@@ -3471,13 +3688,76 @@ function GenerateView({activeClient,genConfig,setGenConfig,generatePosts,isGener
         </button>
       </div>
 
-      <p style={{color:"#94a3b8",fontSize:13,margin:"0 0 20px"}}>Genera automaticamente oppure inserisci i contenuti specifici richiesti dal cliente.</p>
+      <p style={{color:"#94a3b8",fontSize:13,margin:"0 0 20px"}}>Motore ContentSplit — genera copy e grafiche professionali per ogni piattaforma.</p>
 
-      {/* ── Quanti post (SOPRA contenuti) ── */}
+      {/* ── ContentSplit Settings ── */}
       <div style={{background:"#fff",borderRadius:16,padding:28,border:"1px solid #e2e8f0",marginBottom:20}}>
+        <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:18}}>
+          <Icons.Sparkles size={18} color="#6366f1"/>
+          <h3 style={{margin:0,fontSize:16,fontWeight:700,color:"#1e293b"}}>ContentSplit Engine</h3>
+          <Badge color="#6366f1">AI</Badge>
+        </div>
+
+        {/* Platform Selection */}
+        <label style={labelStyle}>Piattaforma</label>
+        <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:16}}>
+          {Object.entries(CS_PLATFORMS).map(([key,label])=>(
+            <button key={key} onClick={()=>setGenConfig(p=>({...p,csPlatform:key}))} style={{padding:"10px 18px",borderRadius:10,border:"2px solid "+(((genConfig.csPlatform||'instagram')===key)?"#6366f1":"#e2e8f0"),background:((genConfig.csPlatform||'instagram')===key)?"#eef2ff":"#fff",color:((genConfig.csPlatform||'instagram')===key)?"#6366f1":"#64748b",fontSize:13,fontWeight:600,cursor:"pointer",transition:"all .15s"}}>
+              {key==='instagram'&&<Icons.Instagram size={14} style={{marginRight:6,verticalAlign:"middle"}}/>}
+              {key==='facebook'&&<Icons.Facebook size={14} style={{marginRight:6,verticalAlign:"middle"}}/>}
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {/* Instagram Format */}
+        {(genConfig.csPlatform||'instagram')==='instagram'&&<>
+          <label style={labelStyle}>Formato Instagram</label>
+          <div style={{display:"flex",gap:8,marginBottom:16}}>
+            {Object.entries(CS_FORMATS).map(([key,label])=>(
+              <button key={key} onClick={()=>setGenConfig(p=>({...p,csFormat:key}))} style={{padding:"8px 16px",borderRadius:8,border:"2px solid "+(((genConfig.csFormat||'carousel')===key)?"#a855f7":"#e2e8f0"),background:((genConfig.csFormat||'carousel')===key)?"#faf5ff":"#fff",color:((genConfig.csFormat||'carousel')===key)?"#a855f7":"#64748b",fontSize:12,fontWeight:600,cursor:"pointer"}}>{label}</button>
+            ))}
+          </div>
+          {(genConfig.csFormat||'carousel')==='carousel'&&<div style={{marginBottom:16}}>
+            <label style={labelStyle}>Slide per carosello</label>
+            <input type="range" min={3} max={10} value={genConfig.csSlides||5} onChange={e=>setGenConfig(p=>({...p,csSlides:+e.target.value}))} style={{width:"100%"}}/>
+            <div style={{textAlign:"center",fontWeight:600,fontSize:14,color:"#a855f7"}}>{genConfig.csSlides||5} slide</div>
+          </div>}
+        </>}
+
+        {/* Tone, Language, Hashtag Density, Copy Length — compact row */}
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:16}}>
+          <div>
+            <label style={labelStyle}>Tono</label>
+            <select value={genConfig.csTone||'professional'} onChange={e=>setGenConfig(p=>({...p,csTone:e.target.value}))} style={{...inputStyle,marginBottom:0}}>
+              {Object.entries(CS_TONES_MAP).map(([k,v])=><option key={k} value={k}>{v}</option>)}
+            </select>
+          </div>
+          <div>
+            <label style={labelStyle}>Lingua</label>
+            <select value={genConfig.csLanguage||'auto'} onChange={e=>setGenConfig(p=>({...p,csLanguage:e.target.value}))} style={{...inputStyle,marginBottom:0}}>
+              {Object.entries(CS_LANGUAGES).map(([k,v])=><option key={k} value={k}>{v}</option>)}
+            </select>
+          </div>
+          <div>
+            <label style={labelStyle}>Hashtag</label>
+            <select value={genConfig.csHashtagDensity||'medium'} onChange={e=>setGenConfig(p=>({...p,csHashtagDensity:e.target.value}))} style={{...inputStyle,marginBottom:0}}>
+              {Object.entries(CS_HASHTAG_DENSITY).map(([k,v])=><option key={k} value={k}>{v}</option>)}
+            </select>
+          </div>
+          <div>
+            <label style={labelStyle}>Lunghezza copy</label>
+            <select value={genConfig.csCopyLength||'medium'} onChange={e=>setGenConfig(p=>({...p,csCopyLength:e.target.value}))} style={{...inputStyle,marginBottom:0}}>
+              {Object.entries(CS_COPY_LENGTH).map(([k,v])=><option key={k} value={k}>{v}</option>)}
+            </select>
+          </div>
+        </div>
+
+        {/* Post count slider */}
         <label style={labelStyle}>Quanti post vuoi generare?</label>
         <input type="range" min={1} max={20} value={genConfig.postCount||5} onChange={e=>{setGenConfig({...genConfig,postCount:+e.target.value});const newCount=+e.target.value;setCustomThemes(prev=>{const arr=[...prev];while(arr.length<newCount)arr.push("");while(arr.length>newCount)arr.pop();return arr;});}} style={{width:"100%"}}/>
         <div style={{textAlign:"center",fontWeight:700,fontSize:28,color:"#6366f1",margin:"4px 0 12px"}}>{genConfig.postCount||5} post</div>
+
         {(activeClient.website||activeClient.driveFolder)&&<div style={{background:"#eef2ff",borderRadius:10,padding:12,marginBottom:0,display:"flex",alignItems:"center",gap:8}}>
           <Icons.Image size={14} color="#6366f1"/>
           <span style={{fontSize:12,color:"#4338ca"}}>Le immagini verranno prese {activeClient.website&&<>dal sito <strong>{activeClient.website.replace(/^https?:\/\//,"")}</strong></>}{activeClient.website&&activeClient.driveFolder&&" e "}{activeClient.driveFolder&&<>dalla <strong>cartella Google Drive</strong></>}</span>
@@ -3485,6 +3765,10 @@ function GenerateView({activeClient,genConfig,setGenConfig,generatePosts,isGener
         {activeClient.files?.filter(f=>f.type?.startsWith("image/")).length>0&&<div style={{background:"#fef3c7",borderRadius:10,padding:12,marginTop:8,display:"flex",alignItems:"center",gap:8}}>
           <Icons.Upload size={14} color="#f59e0b"/>
           <span style={{fontSize:12,color:"#92400e"}}>{activeClient.files.filter(f=>f.type?.startsWith("image/")).length} foto caricate dal cliente verranno usate nei post</span>
+        </div>}
+        {!geminiKey&&<div style={{background:"#fef2f2",borderRadius:10,padding:12,marginTop:8,display:"flex",alignItems:"center",gap:8}}>
+          <Icons.X size={14} color="#ef4444"/>
+          <span style={{fontSize:12,color:"#991b1b"}}>API Key Gemini mancante — inseriscila nelle impostazioni per attivare ContentSplit AI</span>
         </div>}
       </div>
 
@@ -3610,7 +3894,7 @@ function GenerateView({activeClient,genConfig,setGenConfig,generatePosts,isGener
       {/* ── Bottone Genera ── */}
       <div style={{marginTop:20}}>
         <button onClick={handleGenerate} disabled={isGenerating||convertingSelected} style={{width:"100%",padding:"16px 0",borderRadius:14,border:"none",background:isGenerating||convertingSelected?"#94a3b8":"linear-gradient(135deg,#6366f1,#a855f7)",color:"#fff",fontSize:16,fontWeight:700,cursor:isGenerating||convertingSelected?"wait":"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:8,boxShadow:"0 4px 12px rgba(99,102,241,.3)"}}>
-          {isGenerating?<><div className="spinner"/> Recupero immagini e genero post...</>:convertingSelected?<><div className="spinner"/> Preparazione immagini selezionate...</>:<><Icons.Sparkles size={20}/> Genera {genConfig.postCount||5} post{selectedGalleryIdxs.size>0?" con "+selectedGalleryIdxs.size+" foto selezionate":""}</>}
+          {isGenerating?<><div className="spinner"/> ContentSplit sta generando {genConfig.postCount||5} post per {CS_PLATFORMS[genConfig.csPlatform||'instagram']}...</>:convertingSelected?<><div className="spinner"/> Preparazione immagini selezionate...</>:<><Icons.Sparkles size={20}/> Genera {genConfig.postCount||5} post {CS_PLATFORMS[genConfig.csPlatform||'instagram']}{selectedGalleryIdxs.size>0?" con "+selectedGalleryIdxs.size+" foto selezionate":""}</>}
         </button>
         {scrapingResult&&<div style={{marginTop:12,padding:12,borderRadius:10,background:scrapingResult.includes("Non sono")?"#fef3c7":"#f0fdf4",display:"flex",alignItems:"center",gap:8}}>
           {scrapingResult.includes("Non sono")?<Icons.X size={14} color="#f59e0b"/>:<Icons.Check size={14} color="#10b981"/>}
