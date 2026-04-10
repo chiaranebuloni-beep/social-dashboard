@@ -950,33 +950,52 @@ function generatePost(client,date,postIndex,customTheme,graphicStyle,templatePro
 
   const aspectRatio=type==="Carosello"?"4:5 portrait (1080x1350px)":"1:1 square (1080x1080px)";
 
-  imagePrompt=`You are an elite graphic designer creating a BACKGROUND-ONLY graphic for a social media post. The text will be added separately with real fonts — DO NOT include ANY text, letters, words, numbers, or typography in the image.
+  // ── ContentSplit-style SYSTEM INSTRUCTION (role definition + brand identity) ──
+  const imageSystemInstruction=`You are a world-class social media graphic designer working for a premium design agency. You create scroll-stopping, professional social media visuals for brands.
 
-CANVAS: ${aspectRatio}. Fill the ENTIRE canvas edge-to-edge.
+CORE RULES:
+1. Generate ONLY the visual background/artwork — NO text, NO letters, NO typography, NO watermarks. Text will be overlaid programmatically with real fonts afterward.
+2. Fill the ENTIRE canvas edge-to-edge. No white borders, no margins.
+3. Every design must feel like a premium Canva Pro or Adobe Express template — rich, layered, professional.
+4. Match the brand identity precisely: colors, mood, visual language.
 
-BRAND CONTEXT: "${client.name}" — ${sector}. Tone: ${toneDesc}.
+BRAND IDENTITY:
+- Brand: "${client.name}" — ${sector}
+- Tone: ${toneDesc}
+- Color palette: ${paletteColors.join(", ")}
+- Primary background: ${bgColor} | Text contrast: ${textColor} | Accent: ${accentColor}
+${fontName!=="Inter"?`- Heading font style: ${fontName} | Body font: ${fontBodyName}`:""}
+${client.canvaStyle?`- Brand visual style: ${client.canvaStyle}`:""}
+${client.target?`- Target audience: ${client.target}`:""}
+${client.description?`- Brand description: ${client.description.substring(0,200)}`:""}
 
-⚠️ CRITICAL: Generate ONLY the visual background/artwork. DO NOT render any text, titles, subtitles, brand names, or lettering of any kind. The image must be a pure visual design — text will be overlaid programmatically with real fonts afterward.
+DESIGN PRINCIPLES:
+- Visual depth: layering, shadows, overlays, gradients, transparency effects
+- Color harmony: use the brand palette to create gradients, overlays, tints — not flat blocks
+- Composition: rule of thirds, leave breathing space for text overlay (center for headline, lower for subtitle/CTA)
+- Decorative elements: geometric shapes, lines, abstract patterns, bokeh, textures, gradient meshes
+- Professional quality: this must look like it was made by a senior designer, not an amateur`;
 
-DESIGN REQUIREMENTS:
-- Visual depth: use layering, shadows, overlays, gradients, or transparency effects. NO flat amateur designs.
-- Color harmony: palette ${paletteColors.join(", ")} — use these as inspiration, create gradients, overlays, and tints from them.
-- Composition: follow the rule of thirds. Leave visual space for text overlay (roughly center area for headline, lower area for subtitle).
-- Decorative elements: geometric shapes, lines, dots, abstract patterns, bokeh effects, organic textures, gradient meshes — make it visually rich.
-- The design should feel like a premium Canva Pro or Adobe Express template background.
+  // ── ContentSplit-style USER PROMPT (specific task + copy context + style direction) ──
+  imagePrompt=`TASK: Create a ${aspectRatio} social media graphic background for ${client.name}.
+
+POST CONTEXT (design the visual to complement this content):
+- Theme: "${idea.theme||"branded content"}"
+- Headline/Slogan: "${sloganText}"
+- CTA: "${finalCta}"
+- Post type: ${type}
+${idea.caption?`- Caption preview: "${idea.caption.substring(0,150)}..."`:""}
 
 ${templatePrompt?`LAYOUT DIRECTION (background only, no text):\n${templatePrompt.replace(/title|headline|subtitle|tagline|brand name|text/gi,"visual element")}`:""}
-${isSoloFoto?`CREATIVE DIRECTION: Generate a BEAUTIFUL, HIGH-QUALITY PHOTOGRAPH related to "${client.name}" (${sector}). The photo should be FULL FRAME — no text, no overlays, no graphic elements. Just a stunning, professional-quality photo that relates to the brand's products/services. Think editorial magazine photography or premium stock photo.`:isSoloColore?`CREATIVE DIRECTION: Generate a SOLID COLOR or SUBTLE GRADIENT background using the brand palette: ${paletteColors.join(", ")}. The background should be clean, minimal — could be a solid fill, a gentle gradient between brand colors, or a very subtle texture/pattern using brand colors. NO text, NO photos, NO complex graphics. Think premium minimalist brand background.`:graphicStyle?`CREATIVE DIRECTION FROM USER: "${graphicStyle}"\nThis is the #1 priority — adapt the background to this style. Still NO TEXT.`:`${!templatePrompt?`STYLE:\n- Create a visually rich, multi-layered background composition using the brand colors\n- Add subtle texture, gradient mesh, or abstract geometric decoration\n- Think premium social media template background — NOT a plain colored rectangle`:""}`}
-${hasStylePhoto&&!isSoloFoto?`
-PHOTO INTEGRATION (CRITICAL): The attached photo MUST fill the ENTIRE canvas as the background — edge-to-edge, no borders, no margins. Apply a cinematic color grade + semi-transparent gradient overlay (darker at bottom for future text readability). DO NOT add any text on the photo.`:""}
-${client.canvaStyle&&!graphicStyle&&!templatePrompt?"BRAND STYLE REFERENCE: "+client.canvaStyle:""}
+${isSoloFoto?`CREATIVE DIRECTION: Generate a BEAUTIFUL, HIGH-QUALITY PHOTOGRAPH related to "${client.name}" (${sector}). Full frame, editorial magazine quality — no text, no overlays, no graphic elements. Just a stunning photo that relates to the brand.`:isSoloColore?`CREATIVE DIRECTION: SOLID COLOR or SUBTLE GRADIENT background using brand palette: ${paletteColors.join(", ")}. Clean, minimal — solid fill, gentle gradient, or very subtle texture. NO text, NO photos, NO complex graphics.`:graphicStyle?`CREATIVE DIRECTION: "${graphicStyle}"\nThis is the #1 priority — adapt the background to match this style direction.`:`${!templatePrompt?`STYLE: Create a visually rich, multi-layered background composition using the brand colors. Add subtle texture, gradient mesh, or abstract geometric decoration. Think premium social media template background.`:""}`}
+${hasStylePhoto&&!isSoloFoto?`\nPHOTO INTEGRATION: The attached photo MUST fill the ENTIRE canvas as background — edge-to-edge. Apply cinematic color grading + semi-transparent gradient overlay (darker at bottom for text readability).`:""}
 
-FINAL REMINDER: This image must contain ZERO text, ZERO letters, ZERO typography. Only visual design elements, colors, shapes, photos, textures, and patterns. Text will be added programmatically.`;
+⚠️ MANDATORY: Output image MUST be EXACTLY ${aspectRatio}. ZERO text/letters/typography in the image.`;
 
   imageSuggestion=`Grafica ${toneDesc} per ${client.name} (${sector}). Slogan: "${sloganText}". Sottotitolo: "${finalCta}". Sfondo: ${bgColor}, testo: ${textColor}. Font: ${fontName}/${fontBodyName}. Palette: ${client.palette?.name||"Custom"}.${client.canvaStyle?" Stile: "+client.canvaStyle:""}${hasLogo(client.logo)?" Con logo.":""}`;
 
   return{id:genId(),clientId:client.id,date,type,body:finalBody,imageStyle:imgStyle,theme:idea.theme,slogan:sloganText,
-    imageSuggestion,imagePrompt,graphicStyle:graphicStyle||"",
+    imageSuggestion,imagePrompt,imageSystemInstruction,graphicStyle:graphicStyle||"",
     hashtags:[brandTag,...selHash],cta:finalCta,status:"bozza",fontHeading:fontName,fontBody:fontBodyName,generatedImage:null};
 }
 
@@ -1133,33 +1152,40 @@ Rispondi SOLO con un JSON array valido, senza markdown, senza backtick, senza co
   }catch(e){console.warn("[AI Copy] Error:",e);return null;}
 }
 
-// ─── Gemini API (multimodal: testo + immagini di riferimento) ───
-async function generateImageWithGemini(apiKey, prompt, referenceImages) {
+// ─── Gemini API (multimodal: system + user prompt + immagini di riferimento) ───
+// Ispirato al workflow ContentSplit: system instruction separata, copy integrato, brand context completo
+async function generateImageWithGemini(apiKey, prompt, referenceImages, systemInstruction) {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-image-preview:generateContent?key=${apiKey}`;
 
-  // Build parts: text prompt + optional reference images
+  // Build user parts: text prompt + optional reference images
   const parts = [{ text: prompt }];
 
   if (referenceImages && referenceImages.length > 0) {
-    // Add up to 5 reference images for richer context
     for (const refImg of referenceImages.slice(0, 5)) {
       if (refImg.base64 && refImg.mimeType) {
         parts.push({ inlineData: { mimeType: refImg.mimeType, data: refImg.base64 } });
       }
     }
-    // Add instruction to use reference images creatively
     if (parts.length > 1) {
-      parts[0].text += "\n\nPHOTO INTEGRATION RULES: The attached photos are real brand photos. Use them AS-IS (do not redraw or recreate). Integrate them into the graphic design:\n- As full-bleed background with text overlay and cinematic color grading\n- As a prominent focal element with designed frame, border, or mask shape\n- With professional color correction to match the brand palette\nThe final result must look like a professionally designed social media post where the photo and graphic elements work together seamlessly — like a Canva Pro template.";
+      parts[0].text += "\n\nPHOTO INTEGRATION RULES: The attached photos are real brand photos/designs. Use them as STYLE REFERENCE — replicate their visual language, layout structure, color grading, and design patterns. Create a NEW unique design that belongs to the same brand campaign.\n- Match the exact color palette, spacing, and graphic treatment\n- Use similar geometric elements, overlays, and composition\n- If photos are included, integrate them as full-bleed backgrounds with cinematic color grading\n- The result must look like it was designed by the same designer in the same Canva project.";
     }
+  }
+
+  // Build request body — ContentSplit-style with system instruction
+  const body = {
+    contents: [{ role: "user", parts }],
+    generationConfig: { responseModalities: ["IMAGE","TEXT"] }
+  };
+
+  // Add system instruction if provided (ContentSplit approach: separate system/user prompts)
+  if (systemInstruction) {
+    body.systemInstruction = { parts: [{ text: systemInstruction }] };
   }
 
   const res = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      contents: [{ parts }],
-      generationConfig: { responseModalities: ["IMAGE","TEXT"] }
-    })
+    body: JSON.stringify(body)
   });
   if (!res.ok) { const err = await res.text(); throw new Error(`Gemini API error: ${err}`); }
   const data = await res.json();
@@ -5002,6 +5028,9 @@ function PostDetail({post,client,geminiKey,onBack,onUpdate,onDelete,onCopy}){
       const refStyle=post.designLayers?.referenceDesc?` Additional style notes: "${post.designLayers.referenceDesc}".`:"";
       const basePrompt=`⚠️ MANDATORY IMAGE DIMENSIONS: Generate this image at EXACTLY ${sizeObj.w}x${sizeObj.h} pixels (${sizeObj.ratio} aspect ratio). This is non-negotiable.\n\n${post.imagePrompt}${canvaStyleNote}${refStyle}\n\nIMPORTANT: Generate ONLY the background/visual design WITHOUT any text overlay. Do NOT include any titles, headlines, captions, watermarks or text of any kind in the image. The text will be added separately.\n\nREMINDER: The output image MUST be ${sizeObj.ratio} (${sizeObj.w}×${sizeObj.h}px). ${sizeObj.ratio==="4:5"?"Portrait orientation.":sizeObj.ratio==="9:16"?"Vertical story format.":"Perfect square."}`;
 
+      // ContentSplit-style system instruction (stored in post for prompt review)
+      const sysInstruction=post.imageSystemInstruction||"";
+
       const variations=[
         "Style direction: warm, inviting tones with soft lighting",
         "Style direction: cool, professional tones with clean composition",
@@ -5015,7 +5044,7 @@ function PostDetail({post,client,geminiKey,onBack,onUpdate,onDelete,onCopy}){
       // Generate in batches of 2 to avoid rate limits
       for(let batch=0;batch<3;batch++){
         const promises=variations.slice(batch*2,batch*2+2).map((v,i)=>
-          generateImageWithGemini(geminiKey,basePrompt+"\n\n"+v,refImages.length>0?refImages:null)
+          generateImageWithGemini(geminiKey,basePrompt+"\n\n"+v,refImages.length>0?refImages:null,sysInstruction||null)
             .then(url=>({ok:true,url,idx:batch*2+i}))
             .catch(e=>({ok:false,error:e.message,idx:batch*2+i}))
         );
